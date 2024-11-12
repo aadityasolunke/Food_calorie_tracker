@@ -1,0 +1,73 @@
+trigger:
+  branches:
+    include:
+      - main  # or master or any other branch you wish to trigger on
+
+pr:
+  branches:
+    include:
+      - main  # Pull request trigger for the main branch
+
+pool:
+  vmImage: 'ubuntu-latest'  # You can also use windows-latest or macos-latest based on your needs
+
+variables:
+  azureSubscription: 'Your Azure Subscription Name'  # Azure subscription name from the service connection
+  resourceGroup: 'your-resource-group'  # Azure resource group name
+  appName: 'your-app-name'  # Azure app service name or app identifier
+  location: 'East US'  # Azure location for deployment (optional)
+
+stages:
+- stage: Build
+  displayName: 'Build Stage'
+  jobs:
+    - job: Build
+      displayName: 'Build Job'
+      steps:
+        - task: UseDotNet@2
+          inputs:
+            packageType: 'sdk'
+            version: '7.x'  # Replace with the .NET version required
+            installationPath: $(Agent.ToolsDirectory)/dotnet
+
+        - task: Checkout@1
+          displayName: 'Checkout Repository'
+
+        - script: |
+            dotnet build MyApp.sln --configuration Release
+            dotnet publish MyApp.sln --configuration Release --output $(Build.ArtifactStagingDirectory)
+          displayName: 'Build and Publish'
+
+        - publish: $(Build.ArtifactStagingDirectory)
+          artifact: drop
+          displayName: 'Publish Artifact'
+
+- stage: Test
+  displayName: 'Test Stage'
+  jobs:
+    - job: Test
+      displayName: 'Test Job'
+      steps:
+        - task: Checkout@1
+          displayName: 'Checkout Repository'
+
+        - script: |
+            dotnet test MyApp.sln --configuration Release
+          displayName: 'Run Unit Tests'
+
+- stage: Deploy
+  displayName: 'Deploy Stage'
+  jobs:
+    - job: Deploy
+      displayName: 'Deploy Job'
+      steps:
+        - task: AzureWebApp@1
+          inputs:
+            azureSubscription: $(azureSubscription)
+            appName: $(appName)
+            package: $(Build.ArtifactStagingDirectory)  # Point to the published package
+            resourceGroupName: $(resourceGroup)
+            deployToSlotOrASE: false  # Set to true if deploying to a slot
+
+        - script: echo "Deployment Complete!"
+          displayName: 'Deployment Finished'
